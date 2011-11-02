@@ -1,0 +1,4 @@
+URL:jdbc:mysql://localhost/cvsanaly
+UserName:root
+UserPass:
+RepositoryID:4
