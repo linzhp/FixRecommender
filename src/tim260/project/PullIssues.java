@@ -28,10 +28,13 @@ public class PullIssues {
 				+ "repository_id INTEGER REFERENCES repositories(id),"
 				+ "title VARCHAR(255)," + "body MEDIUMTEXT" + ")");
 		stmt.executeUpdate("CREATE INDEX repository_id ON issues(repository_id)");
+		stmt.executeUpdate("CREATE UNIQUE INDEX issue_number_repository_id ON" +
+				" issues(issue_number, repository_id)");
 		stmt.executeUpdate("CREATE TABLE issues_commits("
 				+ "issue_id INTEGER REFERENCES issues(id),"
 				+ "commit_id INTEGER REFERENCES scmlog(id),"
 				+ "PRIMARY KEY (issue_id, commit_id)" + ")");
+		stmt.executeUpdate("CREATE INDEX issue_id ON issues_commits(issue_id)");
 		stmt.close();
 	}
 
