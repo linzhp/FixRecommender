@@ -17,6 +17,7 @@ public class MyIssueService extends IssueService{
 
 	private static final long serialVersionUID = 2772168428829362454L;
 	
+	@SuppressWarnings("unchecked")
 	public List<RepositoryCommit> getCommits(IRepositoryIdProvider repo, int issueNum) throws IOException{
 		StringBuilder uri = new StringBuilder(SEGMENT_REPOS);
 		uri.append('/').append(repo.generateId());

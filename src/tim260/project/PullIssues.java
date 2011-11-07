@@ -24,9 +24,10 @@ public class PullIssues {
 		stmt.executeUpdate("DROP TABLE IF EXISTS issues_commits");
 		stmt.executeUpdate("CREATE TABLE issues("
 				+ "id INTEGER PRIMARY KEY AUTO_INCREMENT,"
-				+ "issueNumber INTEGER NOT NULL,"
-				+ "repositoryID INTEGER REFERENCES repositories(id),"
+				+ "issue_number INTEGER NOT NULL,"
+				+ "repository_id INTEGER REFERENCES repositories(id),"
 				+ "title VARCHAR(255)," + "body MEDIUMTEXT" + ")");
+		stmt.executeUpdate("CREATE INDEX repository_id ON issues(repository_id)");
 		stmt.executeUpdate("CREATE TABLE issues_commits("
 				+ "issue_id INTEGER REFERENCES issues(id),"
 				+ "commit_id INTEGER REFERENCES scmlog(id),"
@@ -49,7 +50,7 @@ public class PullIssues {
 		IRepositoryIdProvider repo = RepositoryId.create("rails", "rails");
 		PreparedStatement pStmt = conn
 				.prepareStatement(
-						"INSERT INTO issues(issueNumber, repositoryID, title, body)"
+						"INSERT INTO issues(issue_number, repository_id, title, body)"
 								+ "VALUES(?, ?, ?, ?)",
 						Statement.RETURN_GENERATED_KEYS);
 		Statement stmt = conn.createStatement();
