@@ -48,6 +48,7 @@ public class PullIssues {
 		stmt.executeUpdate("CREATE TABLE IF NOT EXISTS issues_commits("
 				+ "issue_id INTEGER REFERENCES issues(id),"
 				+ "commit_id INTEGER REFERENCES scmlog(id),"
+				+ "type VARCHAR(10) default 'Link'"
 				+ "PRIMARY KEY (issue_id, commit_id)" + ")");
 		try {
 			stmt.executeUpdate("CREATE INDEX issue_id ON issues_commits(issue_id)");
@@ -132,7 +133,7 @@ public class PullIssues {
 						try {
 							stmt.executeUpdate("INSERT INTO issues_commits "
 									+ "VALUES(" + issueID + ',' + rs.getInt(1)
-									+ ")");
+									+ ", 'Attach')");
 						} catch (SQLException e) {
 							if(e.getErrorCode() != 1062)
 								throw e;
