@@ -107,7 +107,7 @@ public class DiscoverLinks {
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 		try {
-			stmt.executeUpdate("insert into issues_commits "
+			stmt.executeUpdate("insert into issues_commits(issue_id, commit_id) "
 					+ "values(" + issueID + "," + commitID + ")");
 		} catch (SQLException e) {
 			if(e.getErrorCode() != 1062)
