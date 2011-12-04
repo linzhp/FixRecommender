@@ -2,28 +2,34 @@ package tim260.project;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.TreeSet;
 
 import org.apache.lucene.analysis.LowerCaseFilter;
 import org.apache.lucene.analysis.PorterStemFilter;
+import org.apache.lucene.analysis.ReusableAnalyzerBase;
 import org.apache.lucene.analysis.StopFilter;
-import org.apache.lucene.analysis.StopwordAnalyzerBase;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardFilter;
 import org.apache.lucene.analysis.standard.StandardTokenizer;
 import org.apache.lucene.util.Version;
 
-public class MyAnalyzer extends StopwordAnalyzerBase {
+
+public class MyAnalyzer extends ReusableAnalyzerBase {
+	private Set<Object> englishStopSet;
+	private Set<Object> rubyStopSet;
+	private Version matchVersion;
 
 	public MyAnalyzer(Version matchVersion) {
-		super(matchVersion, getStopwords());
+		this.matchVersion = matchVersion;
+		englishStopSet = StopFilter.makeStopSet(matchVersion, getEnglishStopwords());
+		rubyStopSet = StopFilter.makeStopSet(matchVersion, getRubyStopwords());
 	}
-	
-	private static Set<String> getStopwords(){
-		TreeSet<String> stopwords = new TreeSet<String>();
+
+	private static List<String> getEnglishStopwords() {
+		List<String> stopwords = new ArrayList<String>();
 		// Stop words from
 		// http://www.textfixer.com/resources/common-english-words.txt
 		List<String> stopList1 = Arrays.asList("a", "able", "about", "across",
@@ -70,17 +76,17 @@ public class MyAnalyzer extends StopwordAnalyzerBase {
 				"your", "yours", "yourself", "yourselves");
 		stopwords.addAll(stopList1);
 		stopwords.addAll(stopList2);
-		stopwords.add("mobile");
-		stopwords.add("phone");
-		stopwords.add("it'd");
-		stopwords.add("use");
-		stopwords.add("used");
-		stopwords.add("using");
-		stopwords.add("people");
-		stopwords.add("call");
 		return stopwords;
 	}
 
+	private static List<String> getRubyStopwords() {
+		return Arrays.asList("alias", "and", " BEGIN", "begin", "break",
+				"case", "class", "def", " defined?", "do", "", "else", "elsif",
+				"END", " end", " ensure", "false", "for", " if", "in", "",
+				"module", "next", "nil", " not", "or", "", "redo", "rescue",
+				"retry", "return", "self", "super", "then", "true", "undef",
+				"unless", "until", "when", "while", "yield");
+	}
 	@Override
 	protected TokenStreamComponents createComponents(String fieldName,
 			Reader reader) {
@@ -88,8 +94,12 @@ public class MyAnalyzer extends StopwordAnalyzerBase {
 				reader);
 		TokenStream tok = new StandardFilter(matchVersion, src);
 		tok = new LowerCaseFilter(matchVersion, tok);
-		tok = new StopFilter(matchVersion, tok, stopwords);
-		tok = new PorterStemFilter(tok);
+		if(fieldName.equals("text")){
+			tok = new StopFilter(matchVersion, tok, englishStopSet);			
+			tok = new PorterStemFilter(tok);
+		}else if(fieldName.equals("code")){
+			tok = new StopFilter(matchVersion, tok, rubyStopSet);					
+		}
 		return new TokenStreamComponents(src, tok) {
 			@Override
 			protected boolean reset(final Reader reader) throws IOException {

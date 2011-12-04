@@ -14,6 +14,7 @@
 	<classpathentry kind="lib" path="/usr/local/lib/java/httpcomponents-client-4.1.2/lib/commons-logging-1.1.1.jar"/>
 	<classpathentry kind="lib" path="/usr/local/lib/java/mysql-connector-java-5.1.18/mysql-connector-java-5.1.18-bin.jar"/>
 	<classpathentry kind="lib" path="/usr/local/lib/java/commons-io-2.0.1/commons-io-2.0.1.jar"/>
+	<classpathentry kind="lib" path="/usr/local/lib/java/commons-lang3-3.1/commons-lang3-3.1.jar" sourcepath="/usr/local/lib/java/commons-lang3-3.1/commons-lang3-3.1-sources.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -7,12 +7,23 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.queryParser.QueryParser;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.util.Version;
 
 public class Recommend {
 	private static Index index;
@@ -49,9 +60,26 @@ public class Recommend {
 		
 	}
 		
-	public ArrayList<FixCandicate> getHunks(String desc){
-		ArrayList<FixCandicate> result = new ArrayList<FixCandicate>();
-		return result;
+	public ScoreDoc[] getHunks(String desc) throws Exception {
+		String[] cAndT = separateCodeAndText(desc);
+		IndexReader reader = index.getReader();
+		IndexSearcher searcher = new IndexSearcher(reader);
+		Version ver = Version.LUCENE_34;
+		QueryParser parser = new QueryParser(ver, "text", new MyAnalyzer(ver));
+		String text = cAndT[1];
+		LinkedList<String> fileNames = extractFileNames(text);
+		StringBuilder queryString = new StringBuilder(text);
+		queryString.append("code:(");
+		queryString.append(cAndT[0]);
+		queryString.append(") path:(");
+		for(String f : fileNames){
+			queryString.append(f);
+		}
+		queryString.append(")");
+		
+		Query query = parser.parse(queryString.toString());
+		ScoreDoc[] scoreDocs = searcher.search(query, 1000).scoreDocs;
+		return scoreDocs;
 	}
 	
 	public static Integer getLatestCommit(Date date) throws Exception{
@@ -107,11 +135,14 @@ public class Recommend {
 				+ fileID + " and commit_id=" + commitID);
 		while(hunks.next()){
 			StringBuilder text = new StringBuilder();
+			StringBuilder code = new StringBuilder();
 			// add comments
 			int start = hunks.getInt("start");
 			int end = hunks.getInt("end");
 			if(content != null){
-				text.append(getComment(content, start, end));
+				String[] cAndC = separateCodeAndComment(content, start, end);
+				code.append(cAndC[0]);
+				text.append(cAndC[1]);
 			}
 			// add commit logs
 			int blameCommitID = hunks.getInt("blame_commit_id");
@@ -121,22 +152,25 @@ public class Recommend {
 			text.append(msg.getString("message"));
 			msg.close();
 			// add related issues
-			ResultSet issues = stmt2.executeQuery("select i.title, i.body " +
+			ResultSet issues = stmt2.executeQuery("select title, body " +
 					"from issues i join issues_commits ic on i.id=ic.issue_id " +
 					"where ic.commit_id="+blameCommitID);
 			while(issues.next()){
-				text.append(issues.getString(1));
-				text.append(issues.getString(2));
+				text.append(issues.getString("title"));
+				String[] cAndT = separateCodeAndText(issues.getString("body"));
+				code.append(cAndT[0]);
+				text.append(cAndT[1]);
 			}
 			issues.close();
 			// Construct Document
 			Document doc = new Document();
 			Field textField = new Field("text", text.toString(), Field.Store.YES, Field.Index.ANALYZED);
 			doc.add(textField);
+			doc.add(new Field("code", code.toString(), Field.Store.YES, Field.Index.ANALYZED));
 			doc.add(new Field("file_id", String.valueOf(fileID), Field.Store.YES, Field.Index.NOT_ANALYZED));
 			doc.add(new Field("start", String.valueOf(start), Field.Store.YES, Field.Index.NO));
 			doc.add(new Field("end", String.valueOf(start), Field.Store.YES, Field.Index.NO));
-			doc.add(new Field("path", path, Field.Store.YES, Field.Index.NO));
+			doc.add(new Field("path", path, Field.Store.YES, Field.Index.NOT_ANALYZED));
 			writer.addDocument(doc);
 		}
 		writer.commit();
@@ -145,24 +179,51 @@ public class Recommend {
 		
 	}
 	
-	public static String getComment(String[] content, int start, int end){
+	public static String[] separateCodeAndComment(String[] content, int start, int end){
 		// Comments before the hunk
 		int i = start-2;
 		while(i> 0 && !content[i].trim().startsWith("#"))
 		{i--;}
 		StringBuilder comment = new StringBuilder();
+		StringBuilder code = new StringBuilder();
 		while(i>0 && content[i].trim().startsWith("#")){
-			int commentIdx = content[i].indexOf("#");
-			comment.append(content[i].substring(commentIdx+1));
+			comment.append(StringUtils.substringAfter(content[i], "#").trim());
 			i--;
 		}
 		// Inline comments of the hunk
 		for(i=start-1; i<end; i++){
-			int commentIdx = content[i].indexOf("#");
-			if(commentIdx != -1){
-				comment.append(content[i].substring(commentIdx+1));
-			}
+			code.append(StringUtils.substringBefore(content[i], "#").trim());
+			comment.append(StringUtils.substringAfter(content[i], "#").trim());
 		}
-		return comment.toString();
+		return new String[]{code.toString(), comment.toString()};
+	}
+	
+	public static String[] separateCodeAndText(String string){
+		StringBuilder code = new StringBuilder();
+		StringBuilder text = new StringBuilder();
+		while(string != null && string.length()>0){
+			text.append(StringUtils.substringBefore(string, "```").trim());
+			String snippet = StringUtils.substringBetween(string, "```");
+			if(snippet != null){
+				code.append(snippet.trim());
+				string = StringUtils.substringAfter(string, "```");
+			}
+			string = StringUtils.substringAfter(string, "```");		
+		}
+		
+		return new String[]{code.toString(), text.toString()};
+	}
+	
+	public static LinkedList<String> extractFileNames(String text){
+		LinkedList<String> names = new LinkedList<String>();
+		String regex = "((ci|activerecord|actionmailer|actionpack|activemodel|activerecord|activeresource|activesupport|railties)[^\\s]+\\.rb)";
+		Pattern pattern = Pattern.compile(regex);
+		Matcher matcher = pattern.matcher(text);
+		while(matcher.find()){
+			String fileName = matcher.group(1);
+			names.add(fileName);
+		}
+		text.replaceAll(regex, " ");
+		return names;
 	}
 }
