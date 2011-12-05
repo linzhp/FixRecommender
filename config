@@ -1,4 +1,4 @@
-URL:jdbc:mysql://localhost/cvsanaly
-UserName:root
-UserPass:
-RepositoryID:6
+URL:jdbc:mysql://db-01.soe.ucsc.edu/linzhp
+UserName:linzhp_script
+UserPass:i7zsJqYf
+RepositoryID:5

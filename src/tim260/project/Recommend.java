@@ -4,8 +4,8 @@ import java.io.FileInputStream;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.Properties;
@@ -22,7 +22,6 @@ import org.apache.lucene.queryParser.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.Version;
 
 public class Recommend {
@@ -41,6 +40,13 @@ public class Recommend {
 		if(latestID > index.commidID){
 			Connection conn = DatabaseManager.getConnection();
 			Statement stmt = conn.createStatement();
+			// Ensure all indices are in place
+			try {
+				stmt.executeUpdate("create index commit_id_file_id on line_blames(commit_id, file_id)");
+			} catch (SQLException e) {
+				if(e.getErrorCode() != 1061)
+					throw e;
+			}
 			ResultSet changedFiles = stmt.executeQuery("select file_id, max(commit_id) as cid" +
 					" from actions where commit_id > "
 					+ index.commidID + " and commit_id <=" + latestID + " group by file_id");
@@ -52,6 +58,7 @@ public class Recommend {
 			}
 			changedFiles.close();
 			stmt.close();
+			System.out.println("Number of docs in index: "+index.getReader().maxDoc());
 			index.commidID = latestID;
 		}else if(latestID < index.commidID){
 			System.err.println("Can to go backward!");
@@ -68,14 +75,24 @@ public class Recommend {
 		QueryParser parser = new QueryParser(ver, "text", new MyAnalyzer(ver));
 		String text = cAndT[1];
 		LinkedList<String> fileNames = extractFileNames(text);
+		text = text.replaceAll("\\W", " ");
 		StringBuilder queryString = new StringBuilder(text);
-		queryString.append("code:(");
-		queryString.append(cAndT[0]);
-		queryString.append(") path:(");
-		for(String f : fileNames){
-			queryString.append(f);
+		if(cAndT[0].length()>0)
+		{
+			queryString.append(" code:(");
+			queryString.append(cAndT[0]);
+			queryString.append(")");
 		}
-		queryString.append(")");
+		if(fileNames.size()>0){
+			queryString.append(" AND (");
+			for(String f : fileNames){
+				queryString.append(" path:");
+				queryString.append(f);
+				queryString.append(" OR ");
+			}
+			queryString.delete(queryString.length()-3, queryString.length());
+			queryString.append(")");		
+		}
 		
 		Query query = parser.parse(queryString.toString());
 		ScoreDoc[] scoreDocs = searcher.search(query, 1000).scoreDocs;
@@ -164,7 +181,7 @@ public class Recommend {
 			issues.close();
 			// Construct Document
 			Document doc = new Document();
-			Field textField = new Field("text", text.toString(), Field.Store.YES, Field.Index.ANALYZED);
+			Field textField = new Field("text", text.toString().replaceAll("\\W", " "), Field.Store.YES, Field.Index.ANALYZED);
 			doc.add(textField);
 			doc.add(new Field("code", code.toString(), Field.Store.YES, Field.Index.ANALYZED));
 			doc.add(new Field("file_id", String.valueOf(fileID), Field.Store.YES, Field.Index.NOT_ANALYZED));
@@ -200,9 +217,10 @@ public class Recommend {
 	
 	public static String[] separateCodeAndText(String string){
 		StringBuilder code = new StringBuilder();
+		StringBuilder temp = new StringBuilder();
 		StringBuilder text = new StringBuilder();
 		while(string != null && string.length()>0){
-			text.append(StringUtils.substringBefore(string, "```").trim());
+			temp.append(StringUtils.substringBefore(string, "```"));
 			String snippet = StringUtils.substringBetween(string, "```");
 			if(snippet != null){
 				code.append(snippet.trim());
@@ -211,7 +229,16 @@ public class Recommend {
 			string = StringUtils.substringAfter(string, "```");		
 		}
 		
-		return new String[]{code.toString(), text.toString()};
+		String[] lines = temp.toString().split("\\n");
+		for(String line : lines){
+			if(line.startsWith("    ")){
+				code.append(line.trim());
+			}else{
+				text.append(line.trim());
+			}
+		}
+		
+		return new String[]{code.toString(), temp.toString()};
 	}
 	
 	public static LinkedList<String> extractFileNames(String text){
